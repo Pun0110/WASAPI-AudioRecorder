@@ -1,0 +1,20 @@
+# =========================================================================
+# Gitignore for Visual Studio C++ Project (WASPI AudioRecorder)
+# =========================================================================
+
+# --- Compiler Output Directories ---
+# Block whole folders containing compiled binaries and temporary object files
+/bin/
+/build/
+/ipch/
+/add/
+
+# --- Visual Studio Cache, Databases, and User Settings ---
+.vs/
+*.opensdf
+*.sdf
+*.suo
+*.user
+
+# --- Resource Editor Temporary Files ---
+*.aps

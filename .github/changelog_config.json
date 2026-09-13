@@ -1,0 +1,61 @@
+{
+    "categories": [
+      {
+        "title": "## New Features",
+        "rules": [
+          {
+            "pattern": "^feat:|^feature:",
+            "on_property": "title"
+          }
+        ]
+      },
+      {
+        "title": "## Bug Fixes",
+        "rules": [
+          {
+            "pattern": "^fix:|^bug:|^bugfix:",
+            "on_property": "title"
+          }
+        ]
+      },
+      {
+        "title": "## UI",
+        "rules": [
+          {
+            "pattern": "^ui:",
+            "on_property": "title"
+          }
+        ]
+      },
+      {
+        "title": "## Refactoring",
+        "rules": [
+          {
+            "pattern": "^refactor:",
+            "on_property": "title"
+          }
+        ]
+      },
+      {
+        "title": "## Performance Boosts",
+        "rules": [
+          {
+            "pattern": "^perf:",
+            "on_property": "title"
+          }
+        ]
+      },
+      {
+        "title": "## CI & Maintenance",
+        "rules": [
+          {
+            "pattern": "^ci:|^chore:|^docs:|^doc:",
+            "on_property": "title"
+          }
+        ]
+      }
+    ],
+    
+    "template": "#{{CHANGELOG}}\n\n**Full Changelog**: #{{RELEASE_DIFF}}"
+  }
+  

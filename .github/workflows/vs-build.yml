@@ -1,0 +1,120 @@
+name: Build C++ Project (Visual Studio)
+
+# Запускать сборку при каждом push тега v*
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  
+  # --- JOB 1 : BUILD ---
+  build:
+    name: "Build (${{ matrix.configuration }} | ${{ matrix.platform }})"
+    runs-on: windows-latest
+    
+    if: github.repository == 'Pun0110/WASAPI-AudioRecorder'
+
+    strategy:
+      matrix:
+        configuration: [Release]
+        platform: [x32, x64] 
+
+    steps:
+    # 1. Вычисляем чистую версию без 'v' и сохраняем её в ENV текущего раннера
+    - name: Set Clean Version
+      shell: pwsh
+      run: |
+        $clean_ver = "${{ github.ref_name }}".Replace("^v", "")
+        echo "CLEAN_VERSION=$clean_ver" >> $env:GITHUB_ENV      
+
+    # 2. Скачиваем исходный код репозитория на виртуальную машину
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # 3. Находим MSBuild (утилиту сборки Visual Studio) в системе
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v2
+
+    # 4. Компилируем проект
+    - name: Build solution
+      run: |
+        msbuild "WASAPI AudioRecorder.sln" `
+          -p:Configuration=${{ matrix.configuration }} `
+          -p:Platform=${{ matrix.platform }} `
+          -p:PlatformToolset=v143
+
+    # 5. Упаковываем
+    - name: Zip Executable
+      shell: pwsh
+      run: |
+        $exePath = "bin/${{ matrix.platform }}/${{ matrix.configuration }}/WASAPI AudioRecorder-${{ matrix.platform }}.exe"
+        $zipPath = "bin/${{ matrix.platform }}/${{ matrix.configuration }}/WASAPI AudioRecorder-" + $env:CLEAN_VERSION + "-${{ matrix.platform }}.zip"
+        Compress-Archive -Path "$exePath" -DestinationPath "$zipPath" -Force
+        
+        # Передаем путь к zip в следующий шаг аплоада
+        echo "FINAL_ZIP_PATH=$zipPath" >> $env:GITHUB_ENV
+
+    # 6. Выгрузка артефактов (строго изолированно для каждой комбинации матрицы)
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifact-${{ matrix.configuration }}-${{ matrix.platform }}
+        path: "${{ env.FINAL_ZIP_PATH }}"
+        retention-days: 3        
+
+  # --- JOB 2 : RELEASE ---
+  release:
+    name: "Create GitHub Release (${{ github.ref_name }})"
+    needs: build # Ждем завершения всех сборок
+    runs-on: ubuntu-latest
+    
+    if: github.repository == 'Pun0110/WASAPI-AudioRecorder'
+    
+    permissions:
+      contents: write # Права на запись строго для создания релиза
+
+    steps:
+    # 1. Скачиваем исходный код репозитория на виртуальную машину (нужно выгрузить все коммиты)
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # 2. Вычисляем чистую версию без 'v' и сохраняем её в ENV текущего раннера
+    - name: Set Clean Version
+      run: |
+        CLEAN_VER=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+        echo "CLEAN_VERSION=$CLEAN_VER" >> $GITHUB_ENV  
+
+    # 3. Скачиваем все временные архивы .zip
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: fetched_artifacts
+
+    # 4. Собираем файлы .zip из разных папок в одну общую зону
+    - name: Prepare assets for release
+      run: |
+        mkdir release_zone
+        find fetched_artifacts -name "*.zip" -exec cp {} release_zone/ \;
+        ls -l release_zone/
+
+    # 5. Генерируем текст ченджлога из коммитов
+    - name: Build Changelog
+      id: build_changelog
+      uses: mikepenz/release-changelog-builder-action@v6
+      with:
+        mode: "COMMIT"
+        configuration: ".github/changelog_config.json" 
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # 6. Создаем релиз на GitHub и прикрепляем файлы .zip
+    - name: Create Release via GitHub CLI
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release create "${{ github.ref_name }}" release_zone/*.zip \
+          --title "Release ${{ env.CLEAN_VERSION }}" \
+          --notes "${{ steps.build_changelog.outputs.changelog }}"

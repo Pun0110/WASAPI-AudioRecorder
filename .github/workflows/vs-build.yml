@@ -25,7 +25,7 @@ jobs:
     - name: Set Clean Version
       shell: pwsh
       run: |
-        $clean_ver = "${{ github.ref_name }}".Replace("^v", "")
+        $clean_ver = "${{ github.ref_name }}" -replace("^v", "")
         echo "CLEAN_VERSION=$clean_ver" >> $env:GITHUB_ENV      
 
     # 2. Скачиваем исходный код репозитория на виртуальную машину

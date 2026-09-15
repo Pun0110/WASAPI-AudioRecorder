@@ -5,8 +5,11 @@
 #include "main.h"
 #include "common.h"
 
-// Из audio_capture.cpp
-extern IMMDevice*          g_pSelectedDevice;
+// For short ComPtr
+using Microsoft::WRL::ComPtr;
+
+// From audio_capture.cpp
+extern ComPtr<IMMDevice>	g_pSelectedDevice;
 extern WAVEFORMATEXTENSIBLE g_captureFormat;
 
 // Из file_writer.cpp
@@ -88,32 +91,30 @@ void LocalizeDialog(HWND hDlg) {
 
 // === Перечисление render-устройств (источников для loopback) ===
 void EnumerateDevices() {
-	IMMDeviceEnumerator*  pEnumerator = NULL;
-	IMMDeviceCollection*  pCollection = NULL;
+	ComPtr<IMMDeviceEnumerator> pEnumerator;
+	ComPtr<IMMDeviceCollection> pCollection;
 
-	// чистим старый список (если есть)
-	for (int i = 0; i < g_deviceCount; i++) {
-		if (g_devices[i].pDevice) { g_devices[i].pDevice->Release(); g_devices[i].pDevice = NULL; }
-	}
+	// чистим старый список
+	for (int i = 0; i < g_deviceCount; i++) g_devices[i].pDevice.Reset();
 	
 	g_deviceCount = 0;
 	SendMessage(g_hwndComboSource, CB_RESETCONTENT, 0, 0);
 
-	HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+	HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pEnumerator));
 	if (FAILED(hr)) return;
 
 	// eRender, приложение работает только с loopback
 	hr = pEnumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pCollection);
-	if (FAILED(hr)) { pEnumerator->Release(); return; }
+	if (FAILED(hr))  return;
 
 	UINT count = 0;
 	pCollection->GetCount(&count);
 
 	for (UINT i = 0; i < count && g_deviceCount < 16; i++) {
-		IMMDevice* pDevice = NULL;
+		ComPtr<IMMDevice> pDevice;
 		if (FAILED(pCollection->Item(i, &pDevice))) continue;
 
-		IPropertyStore* pProps = NULL;
+		ComPtr<IPropertyStore> pProps;
 		if (SUCCEEDED(pDevice->OpenPropertyStore(STGM_READ, &pProps))) {
 			PROPVARIANT varName;
 			PropVariantInit(&varName);
@@ -126,13 +127,8 @@ void EnumerateDevices() {
 			}
 
 			PropVariantClear(&varName);
-			pProps->Release();
 		}
-		if (FAILED(hr)) pDevice->Release();
 	}
-
-	pCollection->Release();
-	pEnumerator->Release();
 
 	if (g_deviceCount > 0) SendMessage(g_hwndComboSource, CB_SETCURSEL, 0, 0);
 }
@@ -141,19 +137,13 @@ void EnumerateDevices() {
 void OnDeviceChanged() {
 	int sel = (int)SendMessage(g_hwndComboSource, CB_GETCURSEL, 0, 0);
 	if (sel == CB_ERR || sel >= g_deviceCount) return;
-
-	if (g_pSelectedDevice) { 
-		g_pSelectedDevice->Release(); 
-		g_pSelectedDevice = NULL; }
-
 	g_pSelectedDevice = g_devices[sel].pDevice;
-	g_pSelectedDevice->AddRef();
 }
 
 // === Выбор каталога ===
 void OnBrowseFolder() {
 
-	IFileOpenDialog* pDlg = nullptr;
+	ComPtr<IFileOpenDialog> pDlg;
 
 	if (SUCCEEDED(CoCreateInstance(__uuidof(FileOpenDialog), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pDlg))))
 	{
@@ -163,7 +153,7 @@ void OnBrowseFolder() {
 
 		if (SUCCEEDED(pDlg->Show(g_hwndMain)))
 		{
-			IShellItem* pItem = nullptr;
+			ComPtr<IShellItem> pItem;
 			if (SUCCEEDED(pDlg->GetResult(&pItem)))
 			{
 				WCHAR* pszPath = nullptr;
@@ -173,10 +163,8 @@ void OnBrowseFolder() {
 					SetWindowText(g_hwndLabelDirPath, g_outputDir);
 					CoTaskMemFree(pszPath);
 				}
-				pItem->Release();
 			}
 		}
-		pDlg->Release();
 	}
 }
 
@@ -405,9 +393,9 @@ INT_PTR CALLBACK DialogProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
 		return TRUE;
 
 	case WM_DESTROY:
-		for (int i = 0; i < g_deviceCount; i++)
-			if (g_devices[i].pDevice) g_devices[i].pDevice->Release();
-		if (g_pSelectedDevice) g_pSelectedDevice->Release();
+		for (int i = 0; i < g_deviceCount; i++) g_devices[i].pDevice.Reset();
+		g_pSelectedDevice.Reset();
+
 		PostQuitMessage(0);
 		return TRUE;
 	}

@@ -3,22 +3,25 @@
 #include "stdafx.h"
 #include "common.h"
 
+// For short ComPtr
+using Microsoft::WRL::ComPtr;
+
 // Устройство выбирается один раз в main.cpp и используется и для loopback-
 // захвата, и для этого тихого render-потока — это должно быть одно и то же
 // render-устройство, иначе "костыль" держит бодрым не тот движок.
-extern IMMDevice* g_pSelectedDevice;
+extern ComPtr<IMMDevice> g_pSelectedDevice;
 
 // === Антипростойный поток (проигрываем тишину) ===
 DWORD WINAPI AntiIdleThreadProc(LPVOID lpParam) {
 	CoInitializeEx(NULL, COINIT_MULTITHREADED);
 
-	IAudioClient*       pClient = NULL;
-	IAudioRenderClient* pRenderClient = NULL;
+	ComPtr<IAudioClient>       pClient;
+	ComPtr<IAudioRenderClient> pRenderClient;
 	WAVEFORMATEX*       pMixFormat = NULL;
 	HRESULT hr;
 	UINT32  bufferFrameCount = 0;
 
-	hr = g_pSelectedDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&pClient);
+	hr = g_pSelectedDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, &pClient);
 	if (FAILED(hr)) { g_antiIdleError = TRUE; goto cleanup; }
 
 	hr = pClient->GetMixFormat(&pMixFormat);
@@ -33,7 +36,7 @@ DWORD WINAPI AntiIdleThreadProc(LPVOID lpParam) {
 	hr = pClient->GetBufferSize(&bufferFrameCount);
 	if (FAILED(hr)) { g_antiIdleError = TRUE; goto cleanup; }
 
-	hr = pClient->GetService(__uuidof(IAudioRenderClient), (void**)&pRenderClient);
+	hr = pClient->GetService(IID_PPV_ARGS(&pRenderClient));
 	if (FAILED(hr)) { g_antiIdleError = TRUE; goto cleanup; }
 
 	// Перед стартом сразу заполняем весь буфер тишиной, как рекомендует
@@ -76,8 +79,6 @@ DWORD WINAPI AntiIdleThreadProc(LPVOID lpParam) {
 
 cleanup:
 	if (pClient)       pClient->Stop();
-	if (pRenderClient) pRenderClient->Release();
-	if (pClient)       pClient->Release();
 	if (pMixFormat)    CoTaskMemFree(pMixFormat);
 
 	CoUninitialize();

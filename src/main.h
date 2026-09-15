@@ -17,6 +17,6 @@ struct sControlString {
 
 // Приложение работает только с loopback
 struct DeviceInfo {
-	IMMDevice* pDevice;
+	Microsoft::WRL::ComPtr<IMMDevice> pDevice;
 	WCHAR      name[256];
 };

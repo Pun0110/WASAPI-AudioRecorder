@@ -3,21 +3,24 @@
 #include "stdafx.h"
 #include "common.h"
 
+// For short ComPtr
+using Microsoft::WRL::ComPtr;
+
 // Устройство и формат — устанавливаются из main.cpp перед запуском потока
-IMMDevice*          g_pSelectedDevice = NULL;
+ComPtr<IMMDevice> g_pSelectedDevice;
 WAVEFORMATEXTENSIBLE g_captureFormat;
 
 DWORD WINAPI AudioCaptureThreadProc(LPVOID lpParam) {
 	CoInitializeEx(NULL, COINIT_MULTITHREADED);
 
-	IAudioClient*        pClient = NULL;
-	IAudioCaptureClient* pCaptureClient = NULL;
+	ComPtr<IAudioClient>        pClient;
+	ComPtr<IAudioCaptureClient> pCaptureClient;
 	HANDLE               hAudioEvent = NULL;
 	WAVEFORMATEX*        pMixFormat = NULL;
 	HRESULT				 hr = S_OK;
 
 	// 1. Активируем IAudioClient
-	hr = g_pSelectedDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&pClient);
+	hr = g_pSelectedDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, &pClient);
 	if (FAILED(hr)) { g_captureError = TRUE; goto cleanup; }
 
 	// 2. Получаем формат
@@ -55,7 +58,7 @@ DWORD WINAPI AudioCaptureThreadProc(LPVOID lpParam) {
 	if (FAILED(hr)) { g_captureError = TRUE; goto cleanup; }
 
 	// 6. Получаем capture client
-	hr = pClient->GetService(__uuidof(IAudioCaptureClient), (void**)&pCaptureClient);
+	hr = pClient->GetService(IID_PPV_ARGS(&pCaptureClient));
 	if (FAILED(hr)) { g_captureError = TRUE; goto cleanup; }
 
 	// 7. Старт
@@ -141,8 +144,6 @@ DWORD WINAPI AudioCaptureThreadProc(LPVOID lpParam) {
 cleanup:
 	if (pClient)        pClient->Stop();
 	if (hAudioEvent)    CloseHandle(hAudioEvent);
-	if (pCaptureClient) pCaptureClient->Release();
-	if (pClient)        pClient->Release();
 	if (pMixFormat)     CoTaskMemFree(pMixFormat);
 
 	CoUninitialize();

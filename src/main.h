@@ -2,10 +2,6 @@
 
 #pragma once
 
-#include "resource.h"
-#include <Windows.h>
-#include <mmdeviceapi.h>
-
 // структура для связи контролов (*handle <-> controlID)
 struct sHandleHolder
 {

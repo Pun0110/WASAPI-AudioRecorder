@@ -1,10 +1,6 @@
 ﻿// Copyright (c) 2026 Pun0110. Licensed under the GNU GPL v3.
 
 #include "stdafx.h"
-#include <windows.h>
-#include <commctrl.h>
-#include <shlobj.h>
-#include <strsafe.h>
 #include "resource.h"
 #include "main.h"
 #include "common.h"

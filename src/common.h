@@ -2,12 +2,6 @@
 
 #pragma once
 
-#include <windows.h>
-#include <mmdeviceapi.h>
-#include <audioclient.h>
-#include <mmsystem.h>
-#include <strsafe.h>
-
 #ifndef PKEY_Device_FriendlyName
 #include <wtypes.h>
 const PROPERTYKEY PKEY_Device_FriendlyName = {

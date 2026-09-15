@@ -9,6 +9,13 @@ struct sHandleHolder
 	UINT32	id;
 };
 
+// структура для связи строк (*WCHAR <-> stringId)
+struct sStringMapping
+{
+	WCHAR*	string;
+	UINT32	stringId;
+};
+
 // структура для связи строк (controlId <-> stringId)
 struct sControlString {
 	int controlId;

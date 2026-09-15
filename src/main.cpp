@@ -66,13 +66,30 @@ HANDLE g_hThreadSilence = NULL;
 // Отдельный от g_isRecording флаг для UI
 static BOOL g_uiIsRecording = FALSE;
 
-// === Получаем хэндлы контролов ===
+// === Localization ===
+WCHAR sStart[16];
+WCHAR sStop[16];
+WCHAR sFmtB[16];
+WCHAR sFmtK[16];
+WCHAR sFmtM[16];
+WCHAR sFmtG[16];
+
+sStringMapping stringMapping[] = {
+	{ sStart,	IDS_BTN_START },
+	{ sStop,	IDS_BTN_STOP },
+	{ sFmtB,	IDS_LBL_BUFF_FMTB },
+	{ sFmtK,	IDS_LBL_BUFF_FMTK },
+	{ sFmtM,	IDS_LBL_BUFF_FMTM },
+	{ sFmtG,	IDS_LBL_BUFF_FMTG }
+};
+
+// === Get HWNDs ===
 void GetDlgControlIDs() {
 	for (int i = 0; i < sizeof(handleHolder) / sizeof(sHandleHolder); i++)
 		*(handleHolder[i].pHandle) = GetDlgItem(g_hwndMain, handleHolder[i].id);
 }
 
-// === Локализатор UI ===
+// === Localize UI  ===
 void LocalizeDialog(HWND hDlg) {
 
 	// locallisation test
@@ -80,15 +97,47 @@ void LocalizeDialog(HWND hDlg) {
 		SetThreadUILanguage(MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US));
 	#endif
 	
+	// load strings
+	for (int i = 0; i < sizeof(stringMapping) / sizeof(sStringMapping); i++)
+		LoadString(g_hInstance, stringMapping[i].stringId, stringMapping[i].string, 16);
+
 	WCHAR buff[64];
-	
+	// set UI controls text
 	for (int i = 0; i < sizeof(g_controlStrings) / sizeof(sControlString); i++) {
 		if (LoadString(g_hInstance, g_controlStrings[i].stringId, buff, 64)) {
-			SetDlgItemTextW(hDlg, g_controlStrings[i].controlId, buff);
+			SetDlgItemText(hDlg, g_controlStrings[i].controlId, buff);
 		}
 	}
+
+	SetWindowText(g_hwndBtnRecord, sStart);
 }
 
+// === Localized MessageBox ===
+void LocMessageBox(HWND hDlg, UINT32 textId, UINT msgType) {
+	WCHAR message[256];
+	WCHAR caption[32];
+
+	LoadString(g_hInstance, textId, message, 256);
+	
+	UINT32 msgT;
+	switch (msgType)
+	{
+		case MB_ICONERROR:
+			msgT = IDS_MSG_ERR;
+			break;
+
+		case MB_ICONWARNING:
+			msgT = IDS_MSG_WRN;
+			break;
+
+		default:
+			msgT = IDS_MSG_WRN;
+			break;
+	}
+		
+	LoadString(g_hInstance, msgT, caption, 32);
+	MessageBox(g_hwndMain, message, caption, msgType);
+}
 // === Перечисление render-устройств (источников для loopback) ===
 void EnumerateDevices() {
 	ComPtr<IMMDeviceEnumerator> pEnumerator;
@@ -176,10 +225,10 @@ void FormatTime(DWORD ms, WCHAR* buf, int sz) {
 }
 
 void FormatSize(LONGLONG bytes, WCHAR* buf, int sz) {
-	if (bytes < 1536LL)						StringCchPrintf(buf, sz, L"%lld B", bytes);
-	else if (bytes < 1536LL * 1024)			StringCchPrintf(buf, sz, L"%.2f KB", bytes / 1024.0);
-	else if (bytes < 1536LL * 1024 * 1024)	StringCchPrintf(buf, sz, L"%.2f MB", bytes / (1024.0 * 1024.0));
-	else									StringCchPrintf(buf, sz, L"%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0));
+	if (bytes < 1536LL)						StringCchPrintf(buf, sz, sFmtB, bytes);
+	else if (bytes < 1536LL * 1024)			StringCchPrintf(buf, sz, sFmtK, bytes / 1024.0);
+	else if (bytes < 1536LL * 1024 * 1024)	StringCchPrintf(buf, sz, sFmtM, bytes / (1024.0 * 1024.0));
+	else									StringCchPrintf(buf, sz, sFmtG, bytes / (1024.0 * 1024.0 * 1024.0));
 }
 
 //  === Статистика время, размер ===
@@ -198,12 +247,14 @@ void UpdateStatsLabels() {
 // === Старт записи ===
 void StartRecording() {
 	if (!g_pSelectedDevice) {
-		MessageBox(g_hwndMain, L"Выберите устройство", L"Ошибка", MB_ICONERROR);
+		// device not selected
+		LocMessageBox(g_hwndMain, IDS_MSG_ERRDEVICE, MB_ICONERROR);
 		return;
 	}
 
 	if (g_outputDir[0] == L'\0') {
-		MessageBox(g_hwndMain, L"Выберите каталог для сохранения", L"Ошибка", MB_ICONERROR);
+		// folder not set
+		LocMessageBox(g_hwndMain, IDS_MSG_ERRFOLDER, MB_ICONERROR);
 		return;
 	}
 
@@ -218,7 +269,8 @@ void StartRecording() {
 
 	// Выделяем пул буферов одним блоком
 	if (!AllocateBufferPool()) {
-		MessageBox(g_hwndMain, L"Не удалось выделить память для буферов", L"Ошибка", MB_ICONERROR);
+		// can't allocate memory
+		LocMessageBox(g_hwndMain, IDS_MSG_ERRMEMORY, MB_ICONERROR);
 		CleanupSync();
 		return;
 	}
@@ -236,7 +288,8 @@ void StartRecording() {
 	g_hThreadWriter = CreateThread(NULL, 0, FileWriterThreadProc, NULL, 0, NULL);
 
 	if (!g_hThreadCapture || !g_hThreadWriter) {
-		MessageBox(g_hwndMain, L"Не удалось создать потоки", L"Ошибка", MB_ICONERROR);
+		// can't create worker threads
+		LocMessageBox(g_hwndMain, IDS_MSG_ERRTHREADS, MB_ICONERROR);
 		g_isRecording = FALSE;
 		SetEvent(g_hEventStop);
 		if (g_hThreadCapture) { WaitForSingleObject(g_hThreadCapture, INFINITE); CloseHandle(g_hThreadCapture); g_hThreadCapture = NULL; }
@@ -257,7 +310,7 @@ void StartRecording() {
 	g_uiIsRecording = TRUE;
 
 	// UI
-	SetWindowText(g_hwndBtnRecord, L"stoP");
+	SetWindowText(g_hwndBtnRecord, sStop);
 	EnableWindow(g_hwndComboSource, FALSE);
 	EnableWindow(g_hwndBtnBrowse, FALSE);
 	EnableWindow(g_hwndChkAntiIdle, FALSE);
@@ -287,13 +340,8 @@ void StopRecording() {
 	if (waitCount > 0) {
 		DWORD wr = WaitForMultipleObjects(waitCount, waitHandles, TRUE, 5000);
 		if (wr == WAIT_TIMEOUT) {
-			// Потоки не завершились за разумное время — освобождать память
-			// небезопасно. Сообщаем и не трогаем буферы, чтобы не словить access violation
-			// пользователю остаётся перезапустить приложение.
-			MessageBox(g_hwndMain,
-				L"Рабочие потоки не завершились вовремя. Файл мог остаться неполным.\n"
-				L"Рекомендуется перезапустить приложение.",
-				L"Предупреждение", MB_ICONWARNING);
+			// Threads stuck
+			LocMessageBox(g_hwndMain, IDS_MSG_WRNTHREADS, MB_ICONWARNING);
 		}
 	}
 
@@ -306,7 +354,7 @@ void StopRecording() {
 	CleanupSync();
 
 	// UI
-	SetWindowText(g_hwndBtnRecord, L"Start");
+	SetWindowText(g_hwndBtnRecord, sStart);
 	EnableWindow(g_hwndComboSource, TRUE);
 	EnableWindow(g_hwndBtnBrowse, TRUE);
 	EnableWindow(g_hwndChkAntiIdle, TRUE);
@@ -316,27 +364,22 @@ void StopRecording() {
 	// При ошибке записи на диск или сбое инициализации устройства
 	// захвата сообщаем, что-то пошло не так.
 	if (g_writeError) {
-		MessageBox(g_hwndMain,
-			L"Ошибка записи на диск (например, не хватило места). Файл может быть неполным.",
-			L"Ошибка", MB_ICONERROR);
+		// write error
+		LocMessageBox(g_hwndMain, IDS_MSG_ERRWRITE, MB_ICONERROR);
 	}
 	else if (g_captureError) {
-		MessageBox(g_hwndMain,
-			L"Не удалось захватывать звук с выбранного устройства (устройство отключено/занято?).",
-			L"Ошибка", MB_ICONERROR);
+		// capture error
+		LocMessageBox(g_hwndMain, IDS_MSG_ERRCAPTURE, MB_ICONERROR);
 	}
 
 	if (g_antiIdleError) {
-		MessageBox(g_hwndMain,
-			L"Не удалось запустить фоновый тихий поток (защита от простоя аудио-движка).\n"
-			L"Запись продолжалась без неё — во время пауз в системном звуке возможны дыры.",
-			L"Предупреждение", MB_ICONWARNING);
+		// silence renderer
+		LocMessageBox(g_hwndMain, IDS_MSG_WRNSILENCE, MB_ICONWARNING);
 	}
+
 	if (g_unexpectedGap) {
-		MessageBox(g_hwndMain,
-			L"Во время записи обнаружен разрыв в аудиопотоке, хотя защита от простоя была включена.\n"
-			L"Часть файла может быть рассинхронизирована с реальным временем.",
-			L"Предупреждение", MB_ICONWARNING);
+		// flag AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY
+		LocMessageBox(g_hwndMain, IDS_MSG_WRNGAP, MB_ICONWARNING);
 	}
 }
 
@@ -412,7 +455,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 	HWND hDlg = CreateDialogParam(hInstance, MAKEINTRESOURCE(IDD_DIALOG_MAIN), NULL, DialogProc, 0);
 
 	if (!hDlg) {
-		MessageBox(NULL, L"Не удалось создать главное окно приложения.", L"Ошибка", MB_ICONERROR);
+		LocMessageBox(g_hwndMain, IDS_MSG_ERRWINDOW, MB_ICONERROR);
 		CoUninitialize();
 		return 1;
 	}
